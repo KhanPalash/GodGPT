@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GodGPT + G0DM0D3</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Sidebar Overlay (mobile) -->
+    <div id="sidebar-overlay" class="sidebar-overlay hidden"></div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <span class="sidebar-title">Conversations</span>
+        <button id="btn-new-conv" class="btn-icon" title="New conversation">+</button>
+      </div>
+      <div id="conv-list" class="conv-list"></div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+      <!-- Header -->
+      <header class="header">
+        <button id="btn-menu" class="btn-icon header-btn" title="Menu">&#9776;</button>
+        <div class="header-center">
+          <span id="persona-badge" class="persona-badge">Default</span>
+        </div>
+        <button id="btn-settings" class="btn-icon header-btn" title="Settings">&#9881;</button>
+      </header>
+
+      <!-- Chat area -->
+      <div id="chat-area" class="chat-area">
+        <!-- Welcome screen -->
+        <div id="welcome-screen" class="welcome-screen">
+          <div class="welcome-icon">&#128640;</div>
+          <h1>GodGPT</h1>
+          <p>Universal AI Chat — Configure your API settings to begin.</p>
+          <button id="btn-open-settings" class="btn-primary">Configure API</button>
+        </div>
+
+        <!-- Messages -->
+        <div id="messages" class="messages hidden"></div>
+
+        <!-- Input area -->
+        <div id="input-area" class="input-area">
+          <input type="file" id="file-input" accept="image/*" multiple hidden />
+          <div id="attach-preview" class="attach-preview hidden"></div>
+          <div class="input-wrapper">
+            <button id="btn-generate" class="btn-generate" title="Generate image" disabled>&#127912;</button>
+            <button id="btn-attach" class="btn-attach" title="Attach images" disabled>&#128206;</button>
+            <textarea id="msg-input" placeholder="Message GodGPT..." rows="1" disabled></textarea>
+            <button id="btn-send" class="btn-send" disabled>&#9654;</button>
+          </div>
+          <div class="input-hints">
+            <span id="model-display" class="model-display"></span>
+            <span id="status-text" class="status-text"></span>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Config Modal -->
+  <div id="config-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Configuration</h2>
+        <button id="btn-close-modal" class="btn-icon">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="cfg-base-url">Base URL</label>
+          <input type="text" id="cfg-base-url" placeholder="https://api.openai.com/v1" />
+          <small>OpenAI-compatible API endpoint base</small>
+        </div>
+        <div class="form-group">
+          <label for="cfg-api-key">API Key</label>
+          <input type="password" id="cfg-api-key" placeholder="sk-..." />
+        </div>
+        <div class="form-group">
+          <label for="cfg-model">Model</label>
+          <input type="text" id="cfg-model" placeholder="(auto-detect)" />
+          <small>Leave empty to auto-detect from /v1/models</small>
+        </div>
+        <hr style="border-color:var(--border);margin:12px 0;opacity:0.3" />
+        <div class="form-group">
+          <label for="cfg-img-api-key">&#127912; Image Gen API Key <small style="color:var(--text-muted)">(Google AI for Gemini image gen)</small></label>
+          <input type="password" id="cfg-img-api-key" placeholder="AIza..." />
+          <small>Get free key from <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--accent-hover)">aistudio.google.com/apikey</a></small>
+        </div>
+        <div class="form-group">
+          <label for="cfg-godmode">GodMode</label>
+          <select id="cfg-godmode">
+            <option value="standard">Standard</option>
+            <option value="godmod3">G0DM0D3</option>
+            <option value="parseltongue">Parseltongue</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="cfg-persona">Persona</label>
+          <select id="cfg-persona">
+            <option value="default">Default</option>
+            <option value="rebel">Rebel</option>
+            <option value="ghost">Ghost</option>
+            <option value="sage">Sage</option>
+            <option value="hacker">Hacker</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="cfg-system-prompt">System Prompt</label>
+          <textarea id="cfg-system-prompt" rows="5" placeholder="Optional custom system prompt..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-save-config" class="btn-primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Image Generation Modal -->
+  <div id="img-gen-modal" class="modal hidden">
+    <div class="modal-content img-gen-modal-content">
+      <div class="modal-header">
+        <h2>&#127912; Image Generation</h2>
+        <button id="btn-close-img-gen" class="btn-icon">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="img-gen-prompt">Prompt</label>
+          <textarea id="img-gen-prompt" rows="4" placeholder="Describe the image you want to generate..."></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="img-gen-model">Model</label>
+            <select id="img-gen-model">
+              <option value="imagen-3.0-generate">Imagen 3.0 (Best Quality)</option>
+              <option value="imagen-2.0-generate">Imagen 2.0</option>
+              <option value="dall-e-3">DALL-E 3</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="img-gen-aspect">Aspect Ratio</label>
+            <select id="img-gen-aspect">
+              <option value="1:1">1:1 (Square)</option>
+              <option value="16:9">16:9 (Landscape)</option>
+              <option value="9:16">9:16 (Portrait)</option>
+              <option value="4:3">4:3 (Standard)</option>
+              <option value="3:4">3:4 (Portrait)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="img-gen-resolution">Resolution</label>
+          <select id="img-gen-resolution">
+            <option value="1K">1K (1024px)</option>
+            <option value="2K">2K (1792px)</option>
+            <option value="4K">4K (2048px)</option>
+          </select>
+        </div>
+        <div id="img-gen-status" class="img-gen-status hidden"></div>
+        <div id="img-gen-preview" class="img-gen-preview hidden">
+          <div id="img-gen-results" class="img-gen-results"></div>
+          <button id="btn-insert-gen-img" class="btn-primary img-insert-btn hidden">Insert to Chat</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-generate-img" class="btn-primary">&#127912; Generate</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "godgpt",
+  "version": "1.0.0",
+  "description": "GodGPT + G0DM0D3 Universal AI Chatbot",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "@google/genai": "^1.3.0"
+  }
+}
