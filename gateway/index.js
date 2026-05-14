@@ -98,7 +98,13 @@ class Gateway {
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
         res.setHeader('X-Accel-Buffering', 'no');
-        return Readable.fromWeb(response.body).pipe(res);
+        const readable = Readable.fromWeb(response.body);
+        readable.on('error', (err) => {
+          console.error(`[stream error] ${providerName}: ${err.message}`);
+          if (!res.headersSent) res.status(502).json({ error: 'Stream error' });
+        });
+        res.on('close', () => readable.destroy());
+        return readable.pipe(res);
       }
 
       const data = provider.transformResponse(await response.json());
@@ -118,10 +124,14 @@ class Gateway {
       return res.status(400).json({ error: 'Missing or invalid "prompt" field' });
     }
 
+    // Use gateway auth if body doesn't provide keys
+    const apiKey = api_key || this.getApiKey(req, 'openai');
+    const baseUrl = base_url || getProviderBaseUrl('openai');
+
     const modelText = (model || '').toLowerCase();
     if (modelText.startsWith('dall-e') || modelText === 'dall-e-3') {
       res.setHeader('x-routed-provider', 'openai-images');
-      return handleDalle(req, res, api_key || '', base_url || 'https://api.openai.com');
+      return handleDalle(req, res, apiKey, baseUrl);
     }
 
     let modelsToTry;
@@ -137,7 +147,7 @@ class Gateway {
     for (const modelName of modelsToTry) {
       try {
         const result = await generateGeminiImage({
-          apiKey: api_key || '',
+          apiKey,
           model: modelName,
           prompt,
           n: Math.min(Number(n) || 1, 4),

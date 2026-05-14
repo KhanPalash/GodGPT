@@ -28,7 +28,7 @@ function normalizeBaseUrl(baseUrl) {
 function getProviderForModel(model) {
   const text = (model || '').toLowerCase();
   for (const [prefix, provider] of Object.entries(MODEL_PREFIX_MAP)) {
-    if (text.includes(prefix)) return provider;
+    if (text.startsWith(prefix)) return provider;
   }
   return 'openrouter';
 }

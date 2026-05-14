@@ -18,6 +18,14 @@ function createRateLimiter({ windowMs = 60000, maxRequests = 120 } = {}) {
 
     recent.push(now);
     hits.set(ip, recent);
+
+    // Cleanup: remove IPs with no recent hits
+    if (hits.size > 1000) {
+      for (const [key, timestamps] of hits.entries()) {
+        if (timestamps.every(t => now - t >= windowMs)) hits.delete(key);
+      }
+    }
+
     next();
   };
 }
