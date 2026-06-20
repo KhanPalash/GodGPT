@@ -129,6 +129,7 @@ let state = {
   imgApiKey: localStorage.getItem('gdgpt_img_api_key') || '',
   conversations: JSON.parse(localStorage.getItem('gdgpt_conversations') || '[]'),
   activeConvId: localStorage.getItem('gdgpt_active_conv') || '',
+  sidebarCompact: localStorage.getItem('gdgpt_sidebar_compact') === 'true'
 };
 
 let attachedImages = []; // [{url: base64, name: string}]
@@ -219,6 +220,29 @@ function init() {
 
   // Bind events
   bindEvents();
+
+  // Init sidebar state on desktop
+  if (window.innerWidth >= 769) {
+    if (!state.sidebarCompact) {
+      sidebar.classList.add('expanded');
+    }
+  }
+
+  // Handle resize
+  window.addEventListener('resize', () => {
+    const isDesktop = window.innerWidth >= 769;
+    if (isDesktop) {
+      // On desktop, ensure drawer is closed and expanded state is restored if needed
+      sidebar.classList.remove('open');
+      sidebarOverlay.classList.add('hidden');
+      if (!state.sidebarCompact) {
+        sidebar.classList.add('expanded');
+      }
+    } else {
+      // On mobile, ensure expanded is removed
+      sidebar.classList.remove('expanded');
+    }
+  });
 }
 
 // ============================================================
@@ -236,9 +260,14 @@ function bindEvents() {
 
   msgInput.addEventListener('input', autoResize);
   msgInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
+    // Mobile/touch device: Enter = newline (default), desktop: Enter = send
+    const isMobile = navigator.maxTouchPoints > 0 || window.innerWidth < 768;
+
+    if (e.key === 'Enter' && !isMobile) {
+      if (!e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
     }
     if (e.key === 'Escape' && isStreaming) {
       abortStream();
@@ -276,9 +305,36 @@ function bindEvents() {
   btnGenerateImg.addEventListener('click', generateImage);
   btnInsertGenImg.addEventListener('click', insertGenImgToChat);
 
-  // Click on image in user message to open in new tab
+  // Click on image in user message or copy code
   messages.addEventListener('click', e => {
-    if (e.target.tagName === 'IMG') {
+    const copyBtn = e.target.closest('.copy-btn');
+    if (copyBtn) {
+      const header = copyBtn.closest('.code-header');
+      const pre = header?.nextElementSibling;
+      const codeEl = pre?.querySelector('code');
+      if (codeEl) {
+        const text = codeEl.textContent;
+        navigator.clipboard.writeText(text).then(() => {
+          copyBtn.textContent = 'Copied!';
+          copyBtn.classList.add('copied');
+          setTimeout(() => {
+            copyBtn.textContent = 'Copy';
+            copyBtn.classList.remove('copied');
+          }, 2000);
+        }).catch(() => {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          copyBtn.textContent = 'Copied!';
+          setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
+        });
+      }
+      return;
+    }
+    if (e.target.tagName === 'IMG' && !e.target.closest('.copy-btn')) {
       window.open(e.target.src, '_blank');
     }
   });
@@ -438,6 +494,13 @@ function showWelcome() {
   welcomeScreen.classList.remove('hidden');
   messages.classList.add('hidden');
   inputArea.style.display = 'none';
+
+  // Hide configure button if API already set
+  if (state.baseUrl && state.apiKey) {
+    btnOpenSettings.style.display = 'none';
+  } else {
+    btnOpenSettings.style.display = '';
+  }
 }
 
 function clearMessages() {
@@ -511,13 +574,13 @@ function appendMessage(role, content, stream = false, refusalDetected = false, i
       const indicator = document.createElement('span');
       indicator.className = 'streaming-indicator';
       indicator.id = 'stream-indicator';
-      indicator.textContent = 'generating...';
+      indicator.innerHTML = '<span class="streaming-dot"></span><span class="streaming-dot"></span><span class="streaming-dot"></span>';
       meta.appendChild(indicator);
     }
     if (refusalDetected) {
       const badge = document.createElement('span');
       badge.className = 'refusal-badge';
-      badge.textContent = '⚠️ Refusal detected';
+      badge.textContent = 'Refusal detected';
       meta.appendChild(badge);
     }
   }
@@ -543,7 +606,7 @@ function updateLastMessageRefusal() {
   if (bubble && detectRefusal(bubble.textContent)) {
     const badge = document.createElement('span');
     badge.className = 'refusal-badge';
-    badge.textContent = '⚠️ Refusal detected';
+    badge.textContent = 'Refusal detected';
     meta.appendChild(badge);
   }
 }
@@ -557,7 +620,8 @@ function renderMarkdown(text) {
 
   // Code blocks first (```...```)
   out = out.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
-    return `<pre><code>${code.trimEnd()}</code></pre>`;
+    const langLabel = lang || 'code';
+    return `<div class="code-header"><span>${escapeHtml(langLabel)}</span><button class="copy-btn">Copy</button></div><pre><code>${code.trimEnd()}</code></pre>`;
   });
 
   // Inline code
@@ -650,7 +714,10 @@ function enableInput() {
 }
 
 async function sendMessage() {
-  if (isStreaming) return;
+  if (isStreaming) {
+    abortStream();
+    return;
+  }
   const content = msgInput.value.trim();
   if (!content && attachedImages.length === 0) return;
   if (!state.baseUrl || !state.apiKey) {
@@ -661,7 +728,7 @@ async function sendMessage() {
   // Vision model check
   const hasImages = attachedImages.length > 0;
   if (hasImages && !isVisionCapable(state.model)) {
-    setStatus('⚠️ Model "' + (state.model || 'auto') + '" doesn\'t support images. Try Gemini-2.5-flash.', 'error');
+    setStatus('Model "' + (state.model || 'auto') + '" doesn\'t support images. Try Gemini-2.5-flash.', 'error');
     return;
   }
 
@@ -729,7 +796,8 @@ async function sendMessage() {
 
   // API call
   isStreaming = true;
-  btnSend.innerHTML = '&#9632;'; // stop icon
+  btnSend.classList.add('is-streaming');
+  toggleSendButton(true);
   setStatus('Generating...', '');
 
   currentController = new AbortController();
@@ -829,9 +897,10 @@ async function sendMessage() {
     }
   } finally {
     isStreaming = false;
-    btnSend.innerHTML = '&#9654;';
+    btnSend.classList.remove('is-streaming');
+    toggleSendButton(false);
     currentController = null;
-    if (!state.model) {
+    if (!statusText.classList.contains('error')) {
       setStatus('', '');
     }
   }
@@ -894,8 +963,10 @@ function saveConfig() {
     modelDisplay.textContent = state.model;
   }
 
-  enableInput();
-  msgInput.focus();
+  if (state.baseUrl && state.apiKey) {
+    // Start new conversation automatically after config
+    newConversation();
+  }
 
   // Auto-detect if baseUrl/apiKey changed but no model
   if (state.baseUrl && state.apiKey && !state.model) {
@@ -910,8 +981,17 @@ function saveConfig() {
 // Sidebar (mobile)
 // ============================================================
 function toggleSidebar() {
-  sidebar.classList.toggle('open');
-  sidebarOverlay.classList.toggle('hidden');
+  const isDesktop = window.innerWidth >= 769;
+  if (isDesktop) {
+    // Desktop: toggle expanded mode
+    sidebar.classList.toggle('expanded');
+    state.sidebarCompact = !sidebar.classList.contains('expanded');
+    localStorage.setItem('gdgpt_sidebar_compact', state.sidebarCompact);
+  } else {
+    // Mobile: toggle drawer
+    sidebar.classList.toggle('open');
+    sidebarOverlay.classList.toggle('hidden');
+  }
 }
 
 function closeSidebar() {
@@ -962,7 +1042,7 @@ async function generateImage() {
   const resolution = imgGenResolution.value;
 
   btnGenerateImg.disabled = true;
-  btnGenerateImg.textContent = '⏳ Generating...';
+  btnGenerateImg.querySelector('.btn-text').textContent = 'Generating...';
   imgGenStatus.classList.add('hidden');
   imgGenPreview.classList.add('hidden');
   imgGenResults.innerHTML = '';
@@ -1008,7 +1088,7 @@ async function generateImage() {
     setImgGenStatus('Generation failed: ' + err.message, 'error');
   } finally {
     btnGenerateImg.disabled = false;
-    btnGenerateImg.textContent = '🎨 Generate';
+    btnGenerateImg.querySelector('.btn-text').textContent = 'Generate';
   }
 }
 
@@ -1028,11 +1108,11 @@ function renderImgGenResults(images) {
     actions.className = 'img-result-card-actions';
 
     const dlBtn = document.createElement('button');
-    dlBtn.textContent = '⬇ Download';
+    dlBtn.textContent = 'Download';
     dlBtn.addEventListener('click', () => downloadImage(img.url, idx));
 
     const openBtn = document.createElement('button');
-    openBtn.textContent = '🔍 Open';
+    openBtn.textContent = 'Open';
     openBtn.addEventListener('click', () => window.open(img.url, '_blank'));
 
     actions.appendChild(dlBtn);
@@ -1148,6 +1228,15 @@ function setStatus(text, type) {
 
 function capitalize(str) {
   return str ? str.charAt(0).toUpperCase() + str.slice(1) : '';
+}
+
+function toggleSendButton(isStreaming) {
+  const sendIcon = btnSend.querySelector('.send-icon');
+  const stopIcon = btnSend.querySelector('.stop-icon');
+  if (sendIcon && stopIcon) {
+    sendIcon.style.display = isStreaming ? 'none' : 'inline';
+    stopIcon.style.display = isStreaming ? 'inline' : 'none';
+  }
 }
 
 // ============================================================
